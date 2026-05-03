@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowRight, Zap, Target, AlertTriangle, Lightbulb, RefreshCw, Bookmark, BarChart3, TrendingUp, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ArrowRight, Zap, Target, AlertTriangle, Lightbulb, RefreshCw, Bookmark, BarChart3, TrendingUp, CheckCircle2, MessageCircle, X, Bot } from 'lucide-react';
 import './App.css';
 
 // --- TYPES ---
@@ -33,6 +33,109 @@ interface ResultProfile {
   recommendations: string[];
   nextStep: string;
   toneTag: string;
+}
+
+interface DiagnosticPattern {
+  id: string;
+  condition: (scores: Record<Category, number>) => boolean;
+  priority: number;
+  insightTitle: string;
+  insight: string;
+  whyItHappens: string;
+  marketEffect: string;
+  growthDirection: string;
+}
+
+const DIAGNOSTIC_PATTERNS: DiagnosticPattern[] = [
+  {
+    id: 'pattern_4',
+    priority: 100,
+    condition: (s) => s['Опыт'] >= 3 && s['Навыки'] >= 3 && s['Доказательства'] <= 2,
+    insightTitle: 'Ты сильнее, чем выглядишь снаружи',
+    insight: 'Похоже, твой реальный уровень выше, чем то, как он сейчас представлен рынку. Здесь дело не в том, что тебе срочно нужно становиться лучше, а в том, что ценность нужно яснее показать.',
+    whyItHappens: 'Опыт и навыки уже есть, но без кейсов, упаковки и понятной истории результата рынок видит только часть картины.',
+    marketEffect: 'Из-за этого тебя могут воспринимать как просто исполнителя, хотя внутри уже есть уровень специалиста, который способен давать больше.',
+    growthDirection: 'Сфокусируйся на упаковке: кейсы, портфолио, описание роли, результаты, до/после, отзывы, цифры и понятный оффер.'
+  },
+  {
+    id: 'pattern_2',
+    priority: 95,
+    condition: (s) => s['Навыки'] >= 3 && s['Деньги'] <= 2,
+    insightTitle: 'Навыки сильнее, чем уверенность в цене',
+    insight: 'Ты уже умеешь создавать ценность, но, возможно, пока не до конца переводишь это в деньги. Это частая ситуация: профессиональный уровень растет быстрее, чем внутренняя готовность назвать цену.',
+    whyItHappens: 'Когда нет ясной связи между работой и результатом для клиента или работодателя, цену сложнее обосновывать даже самому себе.',
+    marketEffect: 'На рынке это может приводить к заниженному чеку, мягким переговорам и выбору условий, которые ниже твоего реального вклада.',
+    growthDirection: 'Точка роста — не только в навыках, а в формулировке ценности: что именно ты меняешь, экономишь, ускоряешь или улучшаешь.'
+  },
+  {
+    id: 'pattern_1',
+    priority: 90,
+    condition: (s) => s['Навыки'] >= 3 && s['Доказательства'] <= 2,
+    insightTitle: 'Ценность есть, подтверждений пока мало',
+    insight: 'Похоже, навыки у тебя уже есть, но рынку пока может не хватать доказательств. Это не про недостаток способностей — скорее про то, насколько ясно они видны снаружи.',
+    whyItHappens: 'Ты можешь хорошо выполнять работу, но если нет кейсов, цифр, отзывов или понятных примеров, другим сложнее быстро поверить в твой уровень.',
+    marketEffect: 'На рынке это может проявляться в осторожных клиентах, более низких предложениях или ощущении, что тебя недооценивают.',
+    growthDirection: 'Собери 2–3 кейса, покажи процесс, результат и свою роль. Это может быстро усилить твою позицию без глобальной прокачки навыков.'
+  },
+  {
+    id: 'pattern_6',
+    priority: 90,
+    condition: (s) => s['Опыт'] >= 3 && s['Навыки'] >= 3 && s['Доказательства'] >= 3 && s['Самостоятельность'] >= 3 && s['Деньги'] >= 3,
+    insightTitle: 'У тебя уже есть рыночный рычаг',
+    insight: 'Ты находишься на уровне, где ценность создается не только навыками, но и решениями, ответственностью и влиянием на результат.',
+    whyItHappens: 'Когда опыт, навыки, доказательства, самостоятельность и понимание цены собраны вместе, рынок начинает покупать не просто выполнение задач, а мышление и результат.',
+    marketEffect: 'Это может давать больше свободы в выборе проектов, переговорах, формате работы и уровне дохода.',
+    growthDirection: 'Следующий шаг — масштабирование: авторская методология, консультации, продукты, сильный оффер или переход в роль партнера/эксперта.'
+  },
+  {
+    id: 'pattern_7',
+    priority: 88,
+    condition: (s) => s['Доказательства'] >= 3 && s['Деньги'] <= 2,
+    insightTitle: 'Доказательства есть, цена пока осторожная',
+    insight: 'У тебя уже есть чем подтвердить свою ценность, но в денежном блоке может оставаться осторожность. Это значит, что опора для роста цены уже есть — её нужно научиться использовать.',
+    whyItHappens: 'Иногда человек собирает опыт и кейсы, но продолжает оценивать себя по старой планке.',
+    marketEffect: 'На рынке это может выглядеть так: ты уже можешь просить больше, но продолжаешь соглашаться на привычные условия.',
+    growthDirection: 'Пересобери аргументацию цены через кейсы, результаты, пользу и уровень ответственности. Цена должна опираться не на смелость, а на доказательства.'
+  },
+  {
+    id: 'pattern_8',
+    priority: 87,
+    condition: (s) => s['Самостоятельность'] >= 3 && s['Доказательства'] <= 2,
+    insightTitle: 'Ответственности много, видимости мало',
+    insight: 'Похоже, ты уже можешь принимать решения и влиять на процесс, но это пока недостаточно видно в твоей внешней упаковке.',
+    whyItHappens: 'Так бывает, когда человек фактически ведет задачи глубже, чем описывает свою роль в портфолио, резюме или самопрезентации.',
+    marketEffect: 'Рынок может не замечать твою самостоятельность и оценивать тебя ниже, чем позволяет реальный вклад.',
+    growthDirection: 'Покажи не только что ты сделал, но и какие решения принимал, какие варианты выбирал и на какой результат повлиял.'
+  },
+  {
+    id: 'pattern_3',
+    priority: 85,
+    condition: (s) => s['Опыт'] >= 3 && s['Самостоятельность'] <= 2,
+    insightTitle: 'Опыта больше, чем влияния',
+    insight: 'У тебя уже есть практическая база, но по ответам похоже, что ты чаще находишься в роли исполнителя, чем человека, который влияет на решения.',
+    whyItHappens: 'Так бывает, когда опыт накапливается через задачи, но не превращается в самостоятельность, инициативу и ответственность за результат.',
+    marketEffect: 'На рынке это может удерживать тебя в более операционной роли, даже если опыта уже достаточно для большего.',
+    growthDirection: 'Следующий шаг — брать больше решений на себя: предлагать варианты, объяснять trade-off, вести часть процесса и показывать влияние на итог.'
+  },
+  {
+    id: 'pattern_5',
+    priority: 80,
+    condition: (s) => s['Опыт'] <= 2 && s['Навыки'] <= 2 && s['Доказательства'] <= 2 && s['Самостоятельность'] <= 2 && s['Деньги'] <= 2,
+    insightTitle: 'Сейчас формируется база',
+    insight: 'Сейчас ты находишься на этапе сборки фундамента. Это не плохая точка — просто рынок пока не может устойчиво считать твою ценность.',
+    whyItHappens: 'Когда мало опыта, доказательств и самостоятельности, цена и уверенность обычно тоже остаются нестабильными.',
+    marketEffect: 'На рынке это может проявляться в сомнениях, небольших проектах, низком чеке или зависимости от внешней оценки.',
+    growthDirection: 'Лучшее решение сейчас — не пытаться сразу прыгнуть выше, а собрать опору: один навык, несколько практических проектов и первые доказательства результата.'
+  }
+];
+
+function getMatchingDiagnosticPattern(categoryScores: Record<Category, number>): DiagnosticPattern | undefined {
+  const matches = DIAGNOSTIC_PATTERNS.filter(pattern => pattern.condition(categoryScores));
+  if (matches.length === 0) return undefined;
+  
+  return matches.reduce((prev, current) => {
+    return (current.priority > prev.priority) ? current : prev;
+  });
 }
 
 // --- DATA ---
@@ -247,7 +350,7 @@ export default function App() {
             <div className="hero-preview">
               <div className="hero-preview-card">
                 <div style={{ color: 'var(--c-text-sec)', fontSize: '0.875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Твой профиль</div>
-                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--c-cyan)', marginBottom: '16px' }}>Специалист с рыночным рычагом</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--c-emerald)', marginBottom: '16px' }}>Специалист с рыночным рычагом</div>
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', marginBottom: '8px' }}>
                   <span style={{ fontSize: '3.5rem', fontWeight: 900, lineHeight: 1 }}>87</span>
                   <span style={{ fontSize: '1.5rem', color: 'var(--c-text-sec)', paddingBottom: '6px' }}>/100</span>
@@ -290,7 +393,7 @@ export default function App() {
 
             <div className="question-card glass-card">
               <div className="question-header">
-                <div style={{ color: 'var(--c-cyan)', fontWeight: 800, fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <div style={{ color: 'var(--c-emerald)', fontWeight: 800, fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   {currentQuestion.category}
                 </div>
                 <h2 className="t-h2">{currentQuestion.title}</h2>
@@ -334,6 +437,13 @@ export default function App() {
   
   const resultProfile = PROFILES.find(p => totalScore >= p.minScore && totalScore <= p.maxScore) || PROFILES[0];
 
+  const categoryScores = QUESTIONS.reduce((acc, q) => {
+    acc[q.category] = answers[q.id] || 0;
+    return acc;
+  }, {} as Record<Category, number>);
+
+  const diagnosticPattern = getMatchingDiagnosticPattern(categoryScores);
+
   const getStatusText = (points: number) => {
     switch(points) {
       case 1: return 'зона роста';
@@ -351,6 +461,33 @@ export default function App() {
         <section className="result-section">
           
           <div className="result-dashboard-grid">
+            {/* PATTERN CARD */}
+            {diagnosticPattern && (
+              <div className="diagnostic-pattern-card glass-card" style={{ gridColumn: '1 / -1', marginBottom: '8px' }}>
+                <div className="pattern-header">
+                  <Lightbulb size={20} color="var(--c-gold)" />
+                  <span style={{ color: 'var(--c-gold)' }}>Что у тебя происходит сейчас</span>
+                </div>
+                <h3 className="t-display" style={{ fontSize: 'clamp(1.5rem, 3vw, 2rem)', marginBottom: '16px', marginTop: '16px' }}>{diagnosticPattern.insightTitle}</h3>
+                <p style={{ fontSize: '1.125rem', lineHeight: '1.6', color: 'var(--c-text-main)', marginBottom: '24px' }}>{diagnosticPattern.insight}</p>
+                
+                <div className="pattern-details" style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
+                  <div className="pattern-block">
+                    <div className="pattern-block-title">Почему так</div>
+                    <p>{diagnosticPattern.whyItHappens}</p>
+                  </div>
+                  <div className="pattern-block">
+                    <div className="pattern-block-title">Что это меняет</div>
+                    <p>{diagnosticPattern.marketEffect}</p>
+                  </div>
+                  <div className="pattern-block">
+                    <div className="pattern-block-title">Куда расти дальше</div>
+                    <p>{diagnosticPattern.growthDirection}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* HERO CARD */}
             <div className="profile-hero-card glass-card">
               <div className="profile-header">
@@ -415,7 +552,7 @@ export default function App() {
                   ))}
                 </ul>
                 <div className="next-step-card glass-card">
-                  <div className="insight-header" style={{ color: 'var(--c-cyan)', marginBottom: '8px' }}><Target size={18} /> Главный следующий шаг</div>
+                  <div className="insight-header" style={{ color: 'var(--c-emerald)', marginBottom: '8px' }}><Target size={18} /> Главный следующий шаг</div>
                   <p style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--c-text-main)' }}>{resultProfile.nextStep}</p>
                 </div>
               </div>
@@ -436,9 +573,153 @@ export default function App() {
              <p style={{ fontSize: '0.75rem', color: 'var(--c-text-sec)', marginTop: '8px' }}>Ответы не сохраняются. Это честная самопроверка, не приговор.</p>
           </div>
         </section>
+        
+        <MarketCoach 
+          profile={resultProfile}
+          marketIndex={clampedIndex}
+          pattern={diagnosticPattern}
+          categoryScores={categoryScores}
+        />
       </main>
       <Footer />
     </div>
+  );
+}
+
+// --- ASSISTANT ---
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+const ASSISTANT_QUESTIONS = [
+  "Почему у меня такой результат?",
+  "Что улучшить первым?",
+  "Где я могу терять деньги?",
+  "Как усилить позицию за 7 дней?",
+  "Я не согласен с результатом"
+] as const;
+
+interface MarketCoachProps {
+  profile: ResultProfile;
+  marketIndex: number;
+  pattern: DiagnosticPattern | undefined;
+  categoryScores: Record<Category, number>;
+}
+
+function MarketCoach({ profile, marketIndex, pattern, categoryScores }: MarketCoachProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: 'init',
+      role: 'assistant',
+      text: 'Привет! Я Market Coach. Помогу интерпретировать результат и наметить следующие шаги. Что бы тебе хотелось разобрать?'
+    }
+  ]);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isOpen]);
+
+  const sortedCategories = Object.entries(categoryScores).sort((a, b) => b[1] - a[1]);
+  const strongest = sortedCategories[0][0];
+  const weakest = sortedCategories[sortedCategories.length - 1][0];
+
+  const getAssistantResponse = (q: string): string => {
+    switch (q) {
+      case "Почему у меня такой результат?":
+        return `Твой индекс — ${marketIndex}/100, это соответствует уровню «${profile.profileTitle}». ${pattern ? pattern.insight : `По ответам видно, что твоя уверенная опора — это ${strongest}, а зона роста — ${weakest}.`} Это не оценка способностей, а текущий снимок того, как твоя ценность может восприниматься снаружи.`;
+        
+      case "Что улучшить первым?":
+        let weakAdvice = '';
+        if (weakest === 'Деньги') weakAdvice = 'Попробуй проанализировать, почему называть более высокую цену пока может быть некомфортно.';
+        else if (weakest === 'Доказательства') weakAdvice = 'Самое простое действие — упаковать 1-2 недавних понятных кейса.';
+        else if (weakest === 'Навыки') weakAdvice = 'Стоит выбрать один ключевой современный навык в твоей нише и точечно его усилить.';
+        else if (weakest === 'Опыт') weakAdvice = 'Здесь поможет только время и практика: бери небольшие, но реальные проекты, чтобы накопить насмотренность.';
+        else if (weakest === 'Самостоятельность') weakAdvice = 'Попробуй в следующем проекте взять на себя ответственность не только за задачу, но и за одно ключевое решение.';
+        
+        return `Сейчас лучше всего сфокусироваться на категории «${weakest}». Именно она может снижать общую видимость твоей ценности. ${weakAdvice}`;
+
+      case "Где я могу терять деньги?":
+        return `Чаще всего потери происходят там, где есть разрыв между фактическим уровнем и тем, как он представлен. Твоя сильная категория — «${strongest}», а требующая внимания — «${weakest}». Если ты делаешь много, но это не подкреплено в зоне «${weakest}», рынок может реагировать более низкими чеками. Точка роста — сократить этот разрыв.`;
+
+      case "Как усилить позицию за 7 дней?":
+        return `Глобальные изменения требуют времени, но за неделю можно усилить видимость того, что уже есть. Первое: ${pattern ? pattern.growthDirection : profile.nextStep} Второе: выбери одну сильную задачу из своего опыта и опиши её по структуре «Задача → Мои решения → Итог».`;
+
+      case "Я не согласен с результатом":
+        return `Это нормально! Любая диагностика — это лишь зеркало твоих ответов в моменте, а не абсолютная истина. Возможно, ты оцениваешь себя строже, чем есть на самом деле, или специфика твоей сферы отличается. Попробуй взять из результата только то, что кажется тебе полезным. Например, мысль о том, что зона роста — «${weakest}», внутренне откликается?`;
+        
+      default:
+        return "Я могу ответить на вопросы из списка, чтобы помочь тебе точнее интерпретировать профиль.";
+    }
+  };
+
+  const handleOptionClick = (question: string) => {
+    const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', text: question };
+    setMessages(prev => [...prev, userMsg]);
+    
+    // Имитация "думающего" ассистента перед ответом
+    setTimeout(() => {
+      const responseText = getAssistantResponse(question);
+      const assistantMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: 'assistant', text: responseText };
+      setMessages(prev => [...prev, assistantMsg]);
+    }, 600);
+  };
+
+  return (
+    <>
+      <button 
+        className="assistant-fab" 
+        onClick={() => setIsOpen(true)}
+        aria-label="Открыть Market Coach ассистента"
+        style={{ display: isOpen ? 'none' : 'flex' }}
+      >
+        <MessageCircle size={28} />
+      </button>
+
+      {isOpen && (
+        <div className="assistant-window glass-card" style={{ padding: 0 }}>
+          <div className="assistant-header">
+            <div className="assistant-title">
+              <Bot size={20} color="var(--c-emerald)" />
+              <span>Market Coach</span>
+            </div>
+            <button 
+              className="assistant-close"
+              onClick={() => setIsOpen(false)}
+              aria-label="Закрыть ассистента"
+            >
+              <X size={20} />
+            </button>
+          </div>
+          
+          <div className="assistant-body">
+            {messages.map((m) => (
+              <div key={m.id} className={`chat-message ${m.role}`}>
+                {m.text}
+              </div>
+            ))}
+            
+            <div className="assistant-options">
+              {ASSISTANT_QUESTIONS.map((q) => (
+                <button 
+                  key={q} 
+                  className="assistant-option-btn"
+                  onClick={() => handleOptionClick(q)}
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+            <div ref={messagesEndRef} />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
